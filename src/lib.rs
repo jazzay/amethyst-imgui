@@ -3,11 +3,11 @@ pub extern crate amethyst;
 pub extern crate gfx;
 #[macro_use] pub extern crate glsl_layout;
 pub extern crate imgui_gfx_renderer;
-pub extern crate shred;
 
 #[macro_use] pub mod make_pass;
 
 use amethyst::{
+	ecs::shred::FetchMut,
 	core::{cgmath},
 	renderer::{
 		error::Result,
@@ -56,7 +56,7 @@ pub struct MouseState {
 
 pub const FONT_THING: &[u8; 1745240] = include_bytes!("../mplus-1p-regular.ttf");
 
-pub fn handle_imgui_events(imgui_state: &mut ImguiState, event: &amethyst::renderer::Event) {
+pub fn handle_imgui_events(resources: &amethyst::ecs::Resources, event: &amethyst::renderer::Event) {
 	use amethyst::{
 		renderer::{
 			ElementState,
@@ -66,6 +66,16 @@ pub fn handle_imgui_events(imgui_state: &mut ImguiState, event: &amethyst::rende
 			WindowEvent::{self, ReceivedCharacter},
 		},
 		winit::{MouseScrollDelta, TouchPhase},
+	};
+
+	let mut imgui_state: Option<FetchMut<'_, Option<ImguiState>>> = resources.try_fetch_mut::<Option<ImguiState>>();
+	let imgui_state: &mut Option<ImguiState> = match imgui_state {
+		Some(ref mut x) => x,
+		_ => return,
+	};
+	let imgui_state: &mut ImguiState = match imgui_state {
+		Some(ref mut x) => x,
+		_ => return,
 	};
 
 	let imgui = &mut imgui_state.imgui;

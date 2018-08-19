@@ -1,21 +1,28 @@
 # Usage:
-1. Add `.with_pass(amethyst_imgui::DrawUi::new())` to your Stage
-1. Add this to your `handle_event`:
+1. In your `main.rs`, do
 ```rust
-	let imgui_state: &mut Option<amethyst_imgui::ImguiState> = &mut data.world.write_resource::<Option<amethyst_imgui::ImguiState>>();
-	if let Some(ref mut imgui_state) = imgui_state {
-		amethyst_imgui::handle_imgui_events(imgui_state, &event);
+// could be whatever, but must take a lifetime argument and impl SystemData
+type ImguiPassData<'a> = (
+	Option<Read<'a, amethyst::renderer::ScreenDimensions>>,
+	Option<Read<'a, amethyst::core::timing::Time>>,
+);
+
+// ui is &mut imgui::Ui, data is &ImguiPassData
+// the closure arguments are defined by the shitty macro, it's not _really_ a closure
+define_pass!(ImguiPass, |ui, data: ImguiPassData| {
+	if let (Some(dimensions), Some(time)) = data {
+		ui.window(im_str!("TEST WINDOW WOOO")).build(|| {
+			ui.text(im_str!("{}x{}, {}", dimensions.width(), dimensions.height(), time.delta_seconds()));
+		});
+		ui.show_demo_window(&mut true);
 	}
+});
 ```
-1. Add this to your main `update`:
+2. In your `Stage`, do
 ```rust
-	let imgui_state: &mut Option<amethyst_imgui::ImguiState> = &mut state.world.write_resource::<Option<amethyst_imgui::ImguiState>>();
-	if let Some(ref mut imgui_state) = imgui_state {
-		imgui_state.run_ui = Some(Box::new(move |ui: &mut imgui::Ui<'_>| {
-			ui.show_demo_window(&mut true);
-			ui.window(im_str!("TEST WINDOW WOOO")).build(|| {
-				ui.text(im_str!("{}", seconds));
-			});
-		}));
-	}
+	.with_pass(ImguiPass::default())
+```
+3. Add this to your `handle_event`:
+```rust
+	amethyst_imgui::handle_imgui_events(std::borrow::Borrow::<Resources>::borrow(data.world), &event);
 ```

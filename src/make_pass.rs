@@ -27,8 +27,8 @@ macro_rules! define_pass {
 
 		impl<'a> $crate::amethyst::renderer::pipe::pass::PassData<'a> for $name {
 			type Data = (
-				Option<shred::Read<'a, $crate::amethyst::renderer::ScreenDimensions>>,
-				Option<shred::Read<'a, $crate::amethyst::core::timing::Time>>,
+				shred::ReadExpect<'a, $crate::amethyst::renderer::ScreenDimensions>,
+				shred::ReadExpect<'a, $crate::amethyst::core::timing::Time>,
 				shred::Write<'a, Option<$crate::ImguiState>>,
 				$data_type<'a>,
 			);
@@ -169,7 +169,6 @@ macro_rules! define_pass {
 				encoder: &mut $crate::amethyst::renderer::Encoder,
 				effect: &mut $crate::amethyst::renderer::pipe::Effect,
 				mut factory: $crate::amethyst::renderer::Factory,
-				// (screen_dimensions, time, mut imgui_state, ui_data): <Self as $crate::amethyst::renderer::pipe::pass::PassData<'data>>::Data,
 				data: <Self as $crate::amethyst::renderer::pipe::pass::PassData<'data>>::Data,
 			) {
 				use $crate::amethyst::{
@@ -197,15 +196,6 @@ macro_rules! define_pass {
 				fn run_ui($ui: &mut $crate::imgui::Ui, $data: &$data_type) $body
 
 				let (screen_dimensions, time, mut imgui_state, ui_data) = data;
-
-				let screen_dimensions = match screen_dimensions {
-					Some(x) => x,
-					None => return,
-				};
-				let time = match time {
-					Some(x) => x,
-					None => return,
-				};
 
 				let imgui_state = imgui_state.get_or_insert_with(|| $crate::ImguiState {
 					imgui: self.imgui.take().unwrap(),
