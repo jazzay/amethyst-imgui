@@ -1,9 +1,11 @@
 pub extern crate imgui;
-extern crate amethyst;
-extern crate gfx;
-#[macro_use] extern crate glsl_layout;
-extern crate imgui_gfx_renderer;
-extern crate shred;
+pub extern crate amethyst;
+pub extern crate gfx;
+#[macro_use] pub extern crate glsl_layout;
+pub extern crate imgui_gfx_renderer;
+pub extern crate shred;
+
+#[macro_use] pub mod make_pass;
 
 use amethyst::{
 	core::{cgmath},
@@ -27,254 +29,32 @@ use glsl_layout::{vec2, vec4, Uniform};
 use imgui::{FontGlyphRange, FrameSize, ImFontConfig, ImGui, ImVec4};
 use imgui_gfx_renderer::{Renderer as ImguiRenderer, Shaders};
 
-const VERT_SRC: &[u8] = include_bytes!("shaders/vertex.glsl");
-const FRAG_SRC: &[u8] = include_bytes!("shaders/frag.glsl");
+pub const VERT_SRC: &[u8] = include_bytes!("shaders/vertex.glsl");
+pub const FRAG_SRC: &[u8] = include_bytes!("shaders/frag.glsl");
 
 #[derive(Copy, Clone, Debug, Uniform)]
 #[allow(dead_code)] // This is used by the shaders
 #[repr(C)]
-struct VertexArgs {
-	proj_vec: vec4,
-	coord: vec2,
-	dimension: vec2,
-}
-
-struct RendererThing {
-	renderer: ImguiRenderer<Resources>,
-	texture: gfx::handle::Texture<Resources, gfx::format::R8_G8_B8_A8>,
-	shader_resource_view: gfx::handle::ShaderResourceView<Resources, [f32; 4]>,
-	mesh: Mesh,
-}
-
-pub struct DrawUi<S>
-where
-	S: for<'pd> shred::SystemData<'pd>,
-{
-	imgui: Option<ImGui>,
-	renderer: Option<RendererThing>,
-	run_ui: fn(&mut imgui::Ui, &S),
-}
-
-impl<S> DrawUi<S>
-where
-	S: for<'pd> shred::SystemData<'pd>,
-{
-	pub fn new(run_ui: fn(&mut imgui::Ui, &S)) -> Self {
-		Self {
-			imgui: None,
-			renderer: None,
-			run_ui,
-		}
-	}
+pub struct VertexArgs {
+	pub proj_vec: vec4,
+	pub coord: vec2,
+	pub dimension: vec2,
 }
 
 pub struct ImguiState {
-	imgui: ImGui,
-	mouse_state: MouseState,
-	size: (u16, u16),
-}
-
-type FormattedT = (gfx::format::R8_G8_B8_A8, gfx::format::Unorm);
-
-impl<'pd4, S> PassData<'pd4> for DrawUi<S>
-where
-	S: for <'a> shred::SystemData<'a> + Send,
-{
-	type Data = (
-		shred::ReadExpect<'pd4, amethyst::renderer::ScreenDimensions>,
-		shred::Read<'pd4, amethyst::core::timing::Time>,
-		shred::Write<'pd4, Option<ImguiState>>,
-		S,
-	);
-}
-
-impl<S> Pass for DrawUi<S>
-where
-	S: for<'pd5> shred::SystemData<'pd5> + Send,
-{
-	fn compile(&mut self, mut effect: NewEffect<'_>) -> Result<Effect> {
-		let mut imgui = ImGui::init();
-		{
-			// Fix incorrect colors with sRGB framebuffer
-			fn imgui_gamma_to_linear(col: ImVec4) -> ImVec4 {
-				let x = col.x.powf(2.2);
-				let y = col.y.powf(2.2);
-				let z = col.z.powf(2.2);
-				let w = 1.0 - (1.0 - col.w).powf(2.2);
-				ImVec4::new(x, y, z, w)
-			}
-
-			let style = imgui.style_mut();
-			for col in 0..style.colors.len() {
-				style.colors[col] = imgui_gamma_to_linear(style.colors[col]);
-			}
-		}
-		imgui.set_ini_filename(None);
-
-		let font_size = 13.;
-
-		let _ = imgui.fonts().add_font_with_config(
-			include_bytes!("../mplus-1p-regular.ttf"),
-			ImFontConfig::new()
-				.oversample_h(1)
-				.pixel_snap_h(true)
-				.size_pixels(font_size)
-				.rasterizer_multiply(1.75),
-			&FontGlyphRange::japanese(),
-		);
-
-		let _ = imgui.fonts().add_default_font_with_config(
-			ImFontConfig::new()
-				.merge_mode(true)
-				.oversample_h(1)
-				.pixel_snap_h(true)
-				.size_pixels(font_size),
-		);
-
-		{
-			macro_rules! set_keys {
-				($($key:ident => $id:expr),+$(,)*) => {
-					$(imgui.set_imgui_key(imgui::ImGuiKey::$key, $id);)+
-				};
-			}
-
-			set_keys![
-				Tab => 0,
-				LeftArrow => 1,
-				RightArrow => 2,
-				UpArrow => 3,
-				DownArrow => 4,
-				PageUp => 5,
-				PageDown => 6,
-				Home => 7,
-				End => 8,
-				Delete => 9,
-				Backspace => 10,
-				Enter => 11,
-				Escape => 12,
-				A => 13,
-				C => 14,
-				V => 15,
-				X => 16,
-				Y => 17,
-				Z => 18,
-			];
-		}
-
-		let data = vec![
-			PosTex {
-				position: [0., 1., 0.],
-				tex_coord: [0., 0.],
-			},
-			PosTex {
-				position: [1., 1., 0.],
-				tex_coord: [1., 0.],
-			},
-			PosTex {
-				position: [1., 0., 0.],
-				tex_coord: [1., 1.],
-			},
-			PosTex {
-				position: [0., 1., 0.],
-				tex_coord: [0., 0.],
-			},
-			PosTex {
-				position: [1., 0., 0.],
-				tex_coord: [1., 1.],
-			},
-			PosTex {
-				position: [0., 0., 0.],
-				tex_coord: [0., 1.],
-			},
-		];
-
-		let (texture, shader_resource_view, target) = effect.factory.create_render_target::<FormattedT>(1024, 1024).unwrap();
-		let renderer = ImguiRenderer::init(&mut imgui, effect.factory, Shaders::GlSl130, target).unwrap();
-		self.renderer = Some(RendererThing {
-			renderer,
-			texture,
-			shader_resource_view,
-			mesh: Mesh::build(data).build(&mut effect.factory)?,
-		});
-		self.imgui = Some(imgui);
-
-		effect
-			.simple(VERT_SRC, FRAG_SRC)
-			.with_raw_constant_buffer("VertexArgs", std::mem::size_of::<<VertexArgs as Uniform>::Std140>(), 1)
-			.with_raw_vertex_buffer(PosTex::ATTRIBUTES, PosTex::size() as ElemStride, 0)
-			.with_texture("albedo")
-			.with_blended_output("color", ColorMask::all(), blend::ALPHA, None)
-			.build()
-	}
-
-	fn apply<'ui, 'apply_pd: 'ui>(
-		&'ui mut self,
-		encoder: &mut Encoder,
-		effect: &mut Effect,
-		mut factory: amethyst::renderer::Factory,
-		(screen_dimensions, time, mut imgui_state, ui_data): <Self as PassData<'apply_pd>>::Data,
-	) {
-		let imgui_state = imgui_state.get_or_insert_with(|| ImguiState {
-			imgui: self.imgui.take().unwrap(),
-			mouse_state: MouseState::default(),
-			size: (1024, 1024),
-		});
-		let imgui = &mut imgui_state.imgui;
-
-		let (width, height) = (screen_dimensions.width(), screen_dimensions.height());
-		let renderer_thing = self.renderer.as_mut().unwrap();
-
-		let vertex_args = VertexArgs {
-			proj_vec: cgmath::vec4(2. / width, -2. / height, 0., 1.).into(),
-			coord: [0., 0.].into(),
-			dimension: [width, height].into(),
-		};
-
-		if imgui_state.size.0 != width as u16 || imgui_state.size.1 != height as u16 {
-			let (texture, shader_resource_view, target) = factory.create_render_target::<FormattedT>(width as u16, height as u16).unwrap();
-			renderer_thing.renderer.update_render_target(target);
-			renderer_thing.shader_resource_view = shader_resource_view;
-			renderer_thing.texture = texture;
-		}
-
-		encoder.clear(
-			&factory
-				.view_texture_as_render_target::<FormattedT>(&renderer_thing.texture, 0, None)
-				.unwrap(),
-			[0., 0., 0., 0.],
-		);
-		{
-			let mut ui = imgui.frame(FrameSize::new(f64::from(width), f64::from(height), 1.), time.delta_seconds());
-			(self.run_ui)(&mut ui, &ui_data);
-			renderer_thing.renderer.render(ui, &mut factory, encoder).unwrap();
-		}
-
-		{
-			use gfx::texture::{FilterMethod, SamplerInfo, WrapMode};
-			let sampler = factory.create_sampler(SamplerInfo::new(FilterMethod::Trilinear, WrapMode::Clamp));
-			effect.data.samplers.push(sampler);
-		}
-
-		effect.update_constant_buffer("VertexArgs", &vertex_args.std140(), encoder);
-		effect.data.textures.push(renderer_thing.shader_resource_view.raw().clone());
-		effect
-			.data
-			.vertex_bufs
-			.push(renderer_thing.mesh.buffer(PosTex::ATTRIBUTES).unwrap().clone());
-
-		effect.draw(renderer_thing.mesh.slice(), encoder);
-
-		effect.data.textures.clear();
-		effect.data.samplers.clear();
-	}
+	pub imgui: ImGui,
+	pub mouse_state: MouseState,
+	pub size: (u16, u16),
 }
 
 #[derive(Copy, Clone, PartialEq, Debug, Default)]
-struct MouseState {
-	pos: (i32, i32),
-	pressed: (bool, bool, bool),
-	wheel: f32,
+pub struct MouseState {
+	pub pos: (i32, i32),
+	pub pressed: (bool, bool, bool),
+	pub wheel: f32,
 }
+
+pub const FONT_THING: &[u8; 1745240] = include_bytes!("../mplus-1p-regular.ttf");
 
 pub fn handle_imgui_events(imgui_state: &mut ImguiState, event: &amethyst::renderer::Event) {
 	use amethyst::{
